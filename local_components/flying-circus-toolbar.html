@@ -1,0 +1,176 @@
+<!-- Polymer -->
+<link rel="import" href="../../polymer/polymer.html">
+<link rel="import" href="../../polymer/polymer-element.html">
+<link rel="import" href="../../polymer/lib/elements/dom-if.html">
+<link rel="import" href="../../polymer/lib/elements/dom-repeat.html">
+<!-- Iron components -->
+<link rel="import" href="../../iron-icons/iron-icons.html">
+<link rel="import" href="../../iron-icons/av-icons.html">
+<link rel="import" href="../../iron-icons/hardware-icons.html">
+<!-- Paper components -->
+<link rel="import" href="../../paper-fab/paper-fab.html">
+<link rel="import" href="../../paper-spinner/paper-spinner-lite.html">
+
+<dom-module id="flying-circus-toolbar">
+    <template>
+        <style>
+            :host {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                justify-content: flex-start;
+                background: #1e1e1e;
+                padding: 10px 0;
+            }
+            paper-fab {
+                display: inline-block;
+                margin: 0 5px;
+                --paper-fab-background: var(--google-yellow-500);
+            }
+            .separator {
+                width: 15px;
+                height: 100%;
+            }
+            paper-spinner, paper-spinner-lite {
+                margin: 5px;
+                 --paper-spinner-stroke-width: 6px;
+                 --paper-spinner-color: var(--google-yellow-500);
+            }
+        </style>
+        <!-- Disconnected toolbar -->
+        <template is="dom-if" if="[[!connected]]">
+            <paper-fab
+                on-tap="openConnectionDialog"
+                icon="hardware:developer-board"
+                mini>
+            </paper-fab>
+        </template>
+        <!-- Connected toolbar -->
+        <template is="dom-if" if="[[connected]]">
+            <paper-fab
+                on-tap="openConnectionDialog"
+                icon="hardware:developer-board"
+                mini>
+            </paper-fab>
+            <paper-fab
+                on-tap="run"
+                icon="av:play-arrow"
+                disabled="[[running]]"
+                mini>
+            </paper-fab>
+            <paper-fab
+                on-tap="stop"
+                icon="av:stop"
+                mini>
+            </paper-fab>
+            <paper-fab
+                on-tap="reset"
+                icon="av:replay"
+                mini>
+            </paper-fab>
+            <div class="separator"></div>
+            <paper-fab
+                on-tap="listFiles"
+                icon="icons:folder"
+                mini>
+            </paper-fab>
+            <paper-fab
+                on-tap="openSaveDialog"
+                icon="icons:file-upload"
+                mini>
+            </paper-fab>
+            <paper-fab
+                on-tap="openLoadDialog"
+                icon="icons:file-download"
+                mini>
+            </paper-fab>
+            <paper-fab
+                on-tap="openRemoveDialog"
+                icon="icons:delete-forever"
+                mini>
+            </paper-fab>
+        </template>
+        <template is="dom-if" if="[[connecting]]">
+            <paper-spinner-lite active="[[connecting]]"></paper-spinner-lite>
+        </template>
+    </template>
+    <script>
+        class FlyingCircusToolbar extends Polymer.Element {
+            static get is() {
+              return 'flying-circus-toolbar';
+            }
+            static get properties() {
+                return {
+                    connected: {
+                        type: Boolean,
+                        value: false
+                    },
+                    connecting: {
+                        type: Boolean,
+                        value: false
+                    },
+                    running: {
+                        type: Boolean,
+                        value: false
+                    },
+                    availableDevices: {
+                        type: Array,
+                        value: () => {
+                            return []
+                        }
+                    }
+                }
+            }
+
+            disconnect() {
+                this.dispatchEvent(
+                    new CustomEvent('disconnect')
+                )
+            }
+            run() {
+                this.dispatchEvent(
+                    new CustomEvent('run')
+                )
+            }
+            stop() {
+                this.dispatchEvent(
+                    new CustomEvent('stop')
+                )
+            }
+            reset() {
+                this.dispatchEvent(
+                    new CustomEvent('reset')
+                )
+            }
+            listFiles() {
+                this.dispatchEvent(
+                    new CustomEvent('list-files')
+                )
+            }
+            openConnectionDialog() {
+                this.dispatchEvent(
+                    new CustomEvent('disconnect')
+                )
+                this.dispatchEvent(
+                    new CustomEvent('open-connection-dialog')
+                )
+            }
+            openSaveDialog() {
+                this.dispatchEvent(
+                    new CustomEvent('open-save-dialog')
+                )
+            }
+            openLoadDialog() {
+                this.dispatchEvent(
+                    new CustomEvent('open-load-dialog')
+                )
+            }
+            openRemoveDialog() {
+                this.dispatchEvent(
+                    new CustomEvent('open-remove-dialog')
+                )
+            }
+        }
+        window.customElements.define(FlyingCircusToolbar.is, FlyingCircusToolbar)
+    </script>
+</dom-module>

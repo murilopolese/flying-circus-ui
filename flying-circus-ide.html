@@ -1,0 +1,343 @@
+<!-- Polymer -->
+<link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="../polymer/polymer-element.html">
+<link rel="import" href="../polymer/lib/elements/dom-if.html">
+<link rel="import" href="../polymer/lib/elements/dom-repeat.html">
+
+<!-- Paper components -->
+<link rel="import" href="../paper-dialog/paper-dialog.html">
+<link rel="import" href="../paper-input/paper-input.html">
+<link rel="import" href="../paper-button/paper-button.html">
+<link rel="import" href="../paper-listbox/paper-listbox.html">
+<link rel="import" href="../paper-item/paper-item.html">
+<link rel="import" href="../neon-animation/web-animations.html">
+
+<!-- Ace Editor -->
+<link rel="import" href="../juicy-ace-editor/juicy-ace-editor.html">
+
+<!-- Flying Circus Components -->
+<link rel="import" href="./local_components/flying-circus-toolbar.html">
+<link rel="import" href="./local_components/flying-circus-terminal.html">
+
+<!-- JS Libraries -->
+<script type="text/javascript" src="./libs/event-emitter.js"></script>
+
+<dom-module id="flying-circus-ide">
+    <template>
+        <style>
+            :host {
+                display: block;
+            }
+            #code {
+                width: 100%;
+            }
+            #code {
+                width: 100%;
+                height: calc(100vh - 160px);
+            }
+            #console {
+                width: 100%;
+                height: 100px;
+                color: white;
+                background: black;
+            }
+        </style>
+        <flying-circus-toolbar
+            id="toolbar"
+            connected="[[connected]]"
+            connecting="[[connecting]]"
+            running="[[running]]"
+            on-disconnect="disconnect"
+            on-run="run"
+            on-stop="stop"
+            on-reset="reset"
+            on-list-files="listFiles"
+            on-open-connection-dialog="openConnectionDialog"
+            on-open-save-dialog="openSaveDialog"
+            on-open-load-dialog="openLoadDialog"
+            on-open-remove-dialog="openRemoveDialog">
+        </flying-circus-toolbar>
+
+        <!-- EDITOR -->
+        <juicy-ace-editor
+            id="code"
+            class="editor"
+            fontsize="13"
+            softtabs="true"
+            mode="ace/mode/python"
+            theme="ace/theme/clouds"
+            on-change="autosaveCode"
+            value="[[code]]">
+        </juicy-ace-editor>
+
+        <!-- XTERM.JS -->
+        <flying-circus-terminal
+            id="console"
+            on-term-key="sendChar">
+        </flying-circus-terminal>
+
+
+        <!-- TODO: Put all this inside their own components -->
+        <paper-dialog id="connectionDialog" with-backdrop>
+            <paper-input id="ipAddress" always-float-label label="WebREPL Address" value="[[ipAddress]]"></paper-input>
+            <div class="buttons">
+                <paper-button on-tap="connectWebREPL">Connect</paper-button>
+            </div>
+            <template is="dom-if" if="[[availableDevices.length]]">
+                <paper-listbox id="serialPorts">
+                    <template is="dom-repeat" items="[[availableDevices]]">
+                        <paper-item value="[[item.comName]]">
+                            [[item.comName]]
+                        </paper-item>
+                    </template>
+                </paper-listbox>
+                <div class="buttons">
+                    <paper-button on-tap="connectSerial">Connect</paper-button>
+                </div>
+            </template>
+        </paper-dialog>
+        <paper-dialog id="saveDialog" with-backdrop>
+            <h2>Save as</h2>
+            <paper-input id="saveFilename" always-float-label label="File name"></paper-input>
+            <div class="buttons">
+                <paper-button autofocus dialog-dismiss>Cancel</paper-button>
+                <paper-button on-tap="saveFile">OK</paper-button>
+            </div>
+        </paper-dialog>
+        <paper-dialog id="loadDialog" with-backdrop>
+            <h2>Load file</h2>
+            <paper-input id="loadFilename" always-float-label label="File name"></paper-input>
+            <div class="buttons">
+                <paper-button autofocus dialog-dismiss>Cancel</paper-button>
+                <paper-button on-tap="loadFile">OK</paper-button>
+            </div>
+        </paper-dialog>
+        <paper-dialog id="removeDialog" with-backdrop>
+            <h2>Remove file</h2>
+            <paper-input id="removeFilename" always-float-label label="File name"></paper-input>
+            <div class="buttons">
+                <paper-button autofocus dialog-dismiss>Cancel</paper-button>
+                <paper-button on-tap="removeFile">OK</paper-button>
+            </div>
+        </paper-dialog>
+    </template>
+    <script>
+        class FlyingCircusIDE extends Polymer.Element {
+            static get is() {
+              return 'flying-circus-ide';
+            }
+
+            static get properties() {
+                return {
+                    /**
+                    * Flag if app is connected to a board
+                    */
+                    connected: {
+                        type: Boolean,
+                        value: false
+                    },
+                    /**
+                    * Flag if app is trying to connect to a board
+                    */
+                    connecting: {
+                        type: Boolean,
+                        value: false
+                    },
+                    /**
+                    * Flag if app is running code
+                    */
+                    running: {
+                        type: Boolean,
+                        value: false
+                    },
+                    /**
+                    * All available devices to connect via serial
+                    */
+                    availableDevices: {
+                        type: Array,
+                        value: () => {
+                            return []
+                        }
+                    },
+                    /**
+                    * IP Address to connect via WebREPL
+                    */
+                    ipAddress: {
+                        type: String,
+                        value: () => {
+                            return '192.168.0.28'
+                        }
+                    },
+                    /**
+                    * String with code on the editor
+                    */
+                    code: {
+                        type: String,
+                        value: 'print("Hello world")'
+                        // value: null
+                    },
+                    /**
+                    * Communication channel between front end and platform
+                    * specific process
+                    */
+                    bus: {
+                        type: Object
+                    }
+                }
+            }
+
+            connectedCallback() {
+                super.connectedCallback()
+                if (window && window.FlyingCircus && window.FlyingCircus.bus) {
+                    this.set('bus', window.FlyingCircus.bus)
+                }
+
+                this.bindEvents()
+                this.loadCodeFromLocalStorage()
+            }
+
+            bindEvents() {
+                this.bus.on('connected', () => {
+                    this.set('connecting', false)
+                    this.set('connected', true)
+                })
+                this.bus.on('disconnected', () => {
+                    this.set('connecting', false)
+                    this.set('connected', false)
+                })
+                this.bus.on('output', (data) => {
+                    this.output(data)
+                })
+                this.bus.on('available-devices', (availableDevices) => {
+                    this.set('availableDevices', availableDevices)
+                })
+                this.bus.on('load-code', (code) => {
+                    this.set('code', code)
+                })
+                this.bus.on('raw-repl-started', () => {
+                    this.set('running', true)
+                })
+                this.bus.on('raw-repl-finished', () => {
+                    this.set('running', false)
+                })
+            }
+
+            loadCodeFromLocalStorage() {
+                const code = localStorage.getItem('code')
+                this.set('code', code)
+            }
+            autosaveCode() {
+                const code = this.$.code.value
+                if (code && this.code != code) {
+                    clearTimeout(this.autosaveTimeout)
+                    this.autosaveTimeout = setTimeout(() => {
+                        localStorage.setItem('code', code)
+                    }, 2000)
+                }
+                this.set('code', code)
+            }
+
+            output(msg) {
+                this.$.console.write(msg)
+            }
+            loadAvailableDevices() {
+                this.bus.emit('load-available-devices')
+            }
+            execFromString(code) {
+                this.bus.emit('exec-from-string', code)
+            }
+            sendChar(e) {
+                let c = e.detail
+                if (c && this.connected) {
+                    this.bus.emit('exec', c);
+                }
+            }
+
+            connectSerial(e) {
+                let serialPorts = Polymer.dom(this.root).querySelector('#serialPorts')
+                if (serialPorts) {
+                    this.bus.emit('connect', serialPorts.selectedItem.value)
+                    this.$.connectionDialog.close()
+                }
+            }
+            connectWebREPL(e) {
+                if (this.$.ipAddress) {
+                    this.bus.emit('connect-webrepl', this.$.ipAddress.value)
+                    this.$.connectionDialog.close()
+                }
+            }
+
+
+            connect() {
+                this.bus.emit('connect')
+            }
+            disconnect() {
+                this.bus.emit('disconnect')
+            }
+            run() {
+                this.execFromString(this.code)
+            }
+            stop() {
+                this.bus.emit('send-stop')
+            }
+            reset() {
+                this.bus.emit('send-stop')
+                this.bus.emit('send-reset')
+            }
+            listFiles() {
+                const code = `print(' ')
+from os import listdir
+print(listdir())
+`
+                this.execFromString(code)
+            }
+            openConnectionDialog() {
+                this.loadAvailableDevices()
+                this.$.connectionDialog.open()
+            }
+            openSaveDialog() {
+                this.$.saveDialog.open()
+            }
+            openLoadDialog() {
+                this.$.loadDialog.open()
+            }
+            openRemoveDialog() {
+                this.$.removeDialog.open()
+            }
+            saveFile() {
+                const filename = this.$.saveFilename.value
+                if (filename && this.code) {
+                    this._saveFile(this.$.saveFilename.value, this.code)
+                    this.$.saveDialog.close()
+                }
+            }
+            _saveFile(filename, code) {
+                this.bus.emit('save-file', {
+                    filename: this.$.saveFilename.value,
+                    code: this.code
+                })
+            }
+            loadFile() {
+                const filename = this.$.loadFilename.value
+                if (filename) {
+                    this._loadFile(filename)
+                    this.$.loadDialog.close()
+                }
+            }
+            _loadFile(filename) {
+                this.bus.emit('load-file', filename)
+            }
+            removeFile() {
+                const filename = this.$.removeFilename.value
+                if (filename) {
+                    this._removeFile(filename)
+                    this.$.removeDialog.close()
+                }
+            }
+            _removeFile(filename) {
+                this.bus.emit('remove-file', filename)
+            }
+        }
+        window.customElements.define(FlyingCircusIDE.is, FlyingCircusIDE)
+    </script>
+</dom-module>
