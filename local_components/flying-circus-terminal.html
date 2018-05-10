@@ -139,15 +139,23 @@
             connectedCallback() {
                 super.connectedCallback()
 
-                Terminal.applyAddon(fit)
-                this.set('term', new Terminal())
-                this.term.open(Polymer.dom(this.root).querySelector('#terminal'))
-                this.term.setOption('fontSize', 12)
-                this.term.fit()
-                this.term.writeln(`Welcome to MicroPythonIDE! :D`)
-                this.term.on('key', (key, e) => {
-                    this.dispatchEvent(new CustomEvent('term-key', {detail: key}))
-                })
+                // XXX: xterm.js need the parent to be visible (has to have
+                // dimentions) when initializing since many calculations are
+                // made. On Raspberry Pi (KanoOS) it takes a while for this to
+                // happen so as a hotfiXXX, wait half a second to initialize
+                // the terminal.
+                // Similar bug: https://github.com/xtermjs/xterm.js/issues/1397
+                setTimeout(() => {
+                    Terminal.applyAddon(fit)
+                    this.set('term', new Terminal())
+                    this.term.open(Polymer.dom(this.root).querySelector('#terminal'))
+                    this.term.setOption('fontSize', 12)
+                    this.term.fit()
+                    this.term.writeln(`Welcome to MicroPythonIDE! :D`)
+                    this.term.on('key', (key, e) => {
+                        this.dispatchEvent(new CustomEvent('term-key', {detail: key}))
+                    })
+                }, 500)
 
             }
             write(msg) {
