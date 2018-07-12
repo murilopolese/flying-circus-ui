@@ -79,13 +79,13 @@
 
         <!-- TODO: Put all this inside their own components -->
         <paper-dialog id="connectionDialog" with-backdrop>
-            <paper-input id="ipAddress" always-float-label label="WebREPL Address" value="[[ipAddress]]"></paper-input>
+            <paper-input id="ipAddress" always-float-label label="WebREPL Address" value="192.168.0.28"></paper-input>
             <div class="buttons">
                 <paper-button on-tap="connectWebREPL">Connect</paper-button>
             </div>
-            <template is="dom-if" if="[[availableDevices.length]]">
+            <template is="dom-if" if="[[availableSerialDevices.length]]">
                 <paper-listbox id="serialPorts">
-                    <template is="dom-repeat" items="[[availableDevices]]">
+                    <template is="dom-repeat" items="[[availableSerialDevices]]">
                         <paper-item value="[[item.comName]]">
                             [[item.comName]]
                         </paper-item>
@@ -153,19 +153,19 @@
                     /**
                     * All available devices to connect via serial
                     */
-                    availableDevices: {
+                    availableSerialDevices: {
                         type: Array,
                         value: () => {
                             return []
                         }
                     },
                     /**
-                    * IP Address to connect via WebREPL
+                    * All available devices to connect via websocket
                     */
-                    ipAddress: {
-                        type: String,
+                    availableWebsocketDevices: {
+                        type: Array,
                         value: () => {
-                            return '192.168.0.28'
+                            return []
                         }
                     },
                     /**
@@ -174,13 +174,17 @@
                     code: {
                         type: String,
                         value: 'print("Hello world")'
-                        // value: null
                     },
-                    /**
-                    * Communication channel between front end and platform
-                    * specific process
-                    */
-                    bus: {
+                    /** WebSocket (WebREPL) connection object */
+                    websocketConnection: {
+                        type: Object
+                    },
+                    /** USB Serial connection object */
+                    serialConnection: {
+                        type: Object
+                    },
+                    /** Current active connection */
+                    connection: {
                         type: Object
                     }
                 }
@@ -188,36 +192,28 @@
 
             connectedCallback() {
                 super.connectedCallback()
-                if (window && window.FlyingCircus && window.FlyingCircus.bus) {
-                    this.set('bus', window.FlyingCircus.bus)
-                }
-
-                this.bindEvents()
                 this.loadCodeFromLocalStorage()
             }
 
             bindEvents() {
-                this.bus.on('connected', () => {
+                this.connection.on('connected', () => {
                     this.set('connecting', false)
                     this.set('connected', true)
                 })
-                this.bus.on('disconnected', () => {
+                this.connection.on('disconnected', () => {
                     this.set('connecting', false)
                     this.set('connected', false)
                 })
-                this.bus.on('output', (data) => {
+                this.connection.on('output', (data) => {
                     this.output(data)
                 })
-                this.bus.on('available-devices', (availableDevices) => {
-                    this.set('availableDevices', availableDevices)
-                })
-                this.bus.on('load-code', (code) => {
-                    this.set('code', code)
-                })
-                this.bus.on('raw-repl-started', () => {
+                // this.bus.on('load-code', (code) => {
+                //     this.set('code', code)
+                // })
+                this.connection.on('execution-started', () => {
                     this.set('running', true)
                 })
-                this.bus.on('raw-repl-finished', () => {
+                this.connection.on('execution-finished', () => {
                     this.set('running', false)
                 })
             }
@@ -241,55 +237,72 @@
                 this.$.console.write(msg)
             }
             loadAvailableDevices() {
-                this.bus.emit('load-available-devices')
+                if (this.WebsocketConnection) {
+                    this.WebsocketConnection.listAvailable()
+                    .then((result) => {
+                        this.set('availableWebsocketDevices', result)
+                    })
+                } else {
+                    this.set('availableWebsocketDevices', [])
+                }
+                if (this.SerialConnection) {
+                    this.SerialConnection.listAvailable()
+                        .then((result) => {
+                            this.set('availableSerialDevices', result)
+                        })
+                } else {
+                    this.set('availableSerialDevices', [])
+                }
             }
-            execFromString(code) {
-                this.bus.emit('exec-from-string', code)
+            execute(code) {
+                this.connection.execute(code)
             }
             sendChar(e) {
                 let c = e.detail
                 if (c && this.connected) {
-                    this.bus.emit('exec', c);
+                    this.connection.evaluate(c);
                 }
             }
 
             connectSerial(e) {
+                this.disconnect()
                 let serialPorts = Polymer.dom(this.root).querySelector('#serialPorts')
                 if (serialPorts) {
-                    this.bus.emit('connect', serialPorts.selectedItem.value)
+                    this.connection = new this.SerialConnection()
+                    this.bindEvents()
+                    this.connection.open(serialPorts.selectedItem.value)
                     this.$.connectionDialog.close()
                 }
             }
             connectWebREPL(e) {
+                this.disconnect()
                 if (this.$.ipAddress) {
-                    this.bus.emit('connect-webrepl', this.$.ipAddress.value)
+                    const password = '123456'
+                    this.connection = new this.WebsocketConnection()
+                    this.bindEvents()
+                    this.connection.open(this.$.ipAddress.value, password)
                     this.$.connectionDialog.close()
                 }
             }
 
-
-            connect() {
-                this.bus.emit('connect')
-            }
             disconnect() {
-                this.bus.emit('disconnect')
+                if (this.connection) {
+                    this.connection.close()
+                }
             }
             run() {
-                this.execFromString(this.code)
+                this.connection.execute(this.code)
             }
             stop() {
-                this.bus.emit('send-stop')
+                this.connection.stop()
+                this.set('running', false)
             }
             reset() {
-                this.bus.emit('send-stop')
-                this.bus.emit('send-reset')
+                this.stop()
+                this.connection.softReset()
             }
             listFiles() {
-                const code = `print(' ')
-from os import listdir
-print(listdir())
-`
-                this.execFromString(code)
+                this.connection.listFiles()
             }
             openConnectionDialog() {
                 this.loadAvailableDevices()
@@ -312,30 +325,24 @@ print(listdir())
                 }
             }
             _saveFile(filename, code) {
-                this.bus.emit('save-file', {
-                    filename: this.$.saveFilename.value,
-                    code: this.code
-                })
+                this.connection.writeFile(
+                    this.$.saveFilename.value,
+                    this.code
+                )
             }
             loadFile() {
                 const filename = this.$.loadFilename.value
                 if (filename) {
-                    this._loadFile(filename)
+                    this.connection.loadFile(filename)
                     this.$.loadDialog.close()
                 }
-            }
-            _loadFile(filename) {
-                this.bus.emit('load-file', filename)
             }
             removeFile() {
                 const filename = this.$.removeFilename.value
                 if (filename) {
-                    this._removeFile(filename)
+                    this.connection.removeFile(filename)
                     this.$.removeDialog.close()
                 }
-            }
-            _removeFile(filename) {
-                this.bus.emit('remove-file', filename)
             }
         }
         window.customElements.define(FlyingCircusIDE.is, FlyingCircusIDE)

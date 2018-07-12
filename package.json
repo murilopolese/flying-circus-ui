@@ -15,5 +15,6 @@
   "bugs": {
     "url": "https://github.com/murilopolese/flying-circus-ui/issues"
   },
-  "homepage": "https://github.com/murilopolese/flying-circus-ui#readme"
+  "homepage": "https://github.com/murilopolese/flying-circus-ui#readme",
+  "dependencies": {}
 }
