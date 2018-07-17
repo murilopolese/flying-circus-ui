@@ -4,13 +4,16 @@
 <link rel="import" href="../polymer/lib/elements/dom-if.html">
 <link rel="import" href="../polymer/lib/elements/dom-repeat.html">
 
-<!-- Paper components -->
+<!-- Third party components -->
 <link rel="import" href="../paper-dialog/paper-dialog.html">
 <link rel="import" href="../paper-input/paper-input.html">
 <link rel="import" href="../paper-button/paper-button.html">
 <link rel="import" href="../paper-listbox/paper-listbox.html">
 <link rel="import" href="../paper-item/paper-item.html">
+<link rel="import" href="../paper-tabs/paper-tabs.html">
+<link rel="import" href="../paper-tab/paper-tab.html">
 <link rel="import" href="../neon-animation/web-animations.html">
+<link rel="import" href="../iron-pages/iron-pages.html">
 
 <!-- Ace Editor -->
 <link rel="import" href="../juicy-ace-editor/juicy-ace-editor.html">
@@ -77,25 +80,40 @@
         </flying-circus-terminal>
 
 
-        <!-- TODO: Put all this inside their own components -->
-        <paper-dialog id="connectionDialog" with-backdrop>
-            <paper-input id="ipAddress" always-float-label label="WebREPL Address" value="192.168.0.28"></paper-input>
-            <div class="buttons">
-                <paper-button on-tap="connectWebREPL">Connect</paper-button>
-            </div>
-            <template is="dom-if" if="[[availableSerialDevices.length]]">
-                <paper-listbox id="serialPorts">
-                    <template is="dom-repeat" items="[[availableSerialDevices]]">
-                        <paper-item value="[[item.comName]]">
-                            [[item.comName]]
-                        </paper-item>
-                    </template>
-                </paper-listbox>
-                <div class="buttons">
-                    <paper-button on-tap="connectSerial">Connect</paper-button>
+        <!-- CONECTION DIALOG -->
+        <paper-dialog id="connectionDialog" with-backdrop style="width: 250px;">
+            <paper-tabs attr-for-selected="page" selected="{{connectionType}}" fallback-selection="webrepl">
+                <paper-tab page="webrepl">WebREPL</paper-tab>
+                <paper-tab page="serial">Serial</paper-tab>
+            </paper-tabs>
+            <iron-pages attr-for-selected="page" selected="[[connectionType]]" fallback-selection="webrepl">
+                <div page="webrepl">
+                    <paper-input id="ipAddress" always-float-label label="WebREPL Address" value=""></paper-input>
+                    <paper-input id="password" always-float-label label="Password" type="password"></paper-input>
+                    <div class="buttons">
+                        <paper-button on-tap="connectWebREPL">Connect</paper-button>
+                    </div>
                 </div>
-            </template>
+                <div page="serial">
+                    <template is="dom-if" if="[[availableSerialDevices.length]]">
+                        <paper-listbox id="serialPorts">
+                            <template is="dom-repeat" items="[[availableSerialDevices]]">
+                                <paper-item value="[[item.comName]]">
+                                    [[item.comName]]
+                                </paper-item>
+                            </template>
+                        </paper-listbox>
+                        <div class="buttons">
+                            <paper-button on-tap="connectSerial">Connect</paper-button>
+                        </div>
+                    </template>
+                    <template is="dom-if" if="[[!availableSerialDevices.length]]">
+                        <p>No serial device found. Make sure it's connected and on.</p>
+                    </template>
+                </div>
+            </iron-pages>
         </paper-dialog>
+        <!-- SAVE FILE DIALOG -->
         <paper-dialog id="saveDialog" with-backdrop>
             <h2>Save as</h2>
             <paper-input id="saveFilename" always-float-label label="File name"></paper-input>
@@ -104,6 +122,7 @@
                 <paper-button on-tap="saveFile">OK</paper-button>
             </div>
         </paper-dialog>
+        <!-- LOAD FILE DIALOG -->
         <paper-dialog id="loadDialog" with-backdrop>
             <h2>Load file</h2>
             <paper-input id="loadFilename" always-float-label label="File name"></paper-input>
@@ -112,6 +131,7 @@
                 <paper-button on-tap="loadFile">OK</paper-button>
             </div>
         </paper-dialog>
+        <!-- REMOVE FILE DIALOG -->
         <paper-dialog id="removeDialog" with-backdrop>
             <h2>Remove file</h2>
             <paper-input id="removeFilename" always-float-label label="File name"></paper-input>
@@ -277,10 +297,9 @@
             connectWebREPL(e) {
                 this.disconnect()
                 if (this.$.ipAddress) {
-                    const password = '123456'
                     this.connection = new this.WebsocketConnection()
                     this.bindEvents()
-                    this.connection.open(this.$.ipAddress.value, password)
+                    this.connection.open(this.$.ipAddress.value, this.$.password.value)
                     this.$.connectionDialog.close()
                 }
             }
