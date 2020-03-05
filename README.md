@@ -1,5 +1,2 @@
-## Flying Circus UI
+This project is no longer maintained, please check my other attempt to develop a MicroPython programming interface: https://github.com/murilopolese/fabulous-flying-machine
 
-This repo contains the front end for Flying Circus IDE that communicates with the hardware by exchanging events and messages through a bus.
-
-It's mainly used on [Flying Circus Electron](http://github.com/murilopolese/flying-circus-electron) and [Flying Circus Web](https://github.com/murilopolese/flying-circus-web)
